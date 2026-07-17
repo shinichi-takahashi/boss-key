@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>boss-key</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#000; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body.hidecursor, body.hidecursor * { cursor:none !important; }
+
+  /* ===== 舞台(固定サイズをビューポートに合わせて拡縮) ===== */
+  #stage {
+    position:fixed; left:0; top:0; width:1470px; height:956px;
+    transform-origin: top left;
+    background:
+      radial-gradient(1150px 820px at 12% 112%, #ff9d5c 0%, rgba(255,157,92,0) 58%),
+      radial-gradient(1000px 760px at 92% -12%, #6355ff 0%, rgba(99,85,255,0) 56%),
+      radial-gradient(950px 900px at 72% 92%, #b44fd1 0%, rgba(180,79,209,0) 55%),
+      linear-gradient(160deg, #17265c 0%, #3a2e78 42%, #7a3f9e 100%);
+  }
+
+  /* ===== メニューバー ===== */
+  #menubar {
+    position:absolute; top:0; left:0; right:0; height:30px; z-index:500;
+    display:flex; align-items:center; gap:19px; padding:0 16px;
+    background:rgba(250,250,253,.62); backdrop-filter:blur(28px);
+    font-size:13px; color:#1d1d21;
+  }
+  #menubar .logo { width:15px; height:15px; border-radius:4px;
+    background:linear-gradient(145deg,#4b91f7,#3466e0); flex:none; }
+  #menubar .appname { font-weight:700; }
+  #menubar .mi { opacity:.85; }
+  #menubar .sp { flex:1; }
+  #menubar .stat { display:flex; align-items:center; gap:14px; font-size:12px; }
+  #menubar .ime { font-size:12.5px; font-weight:600; background:rgba(0,0,0,.08);
+    border-radius:4px; padding:1px 5px; }
+  #menubar svg { display:block; }
+  #clock { font-size:13px; }
+
+  /* ===== ウインドウ共通 ===== */
+  .window {
+    position:absolute; border-radius:11px; overflow:hidden;
+    display:flex; flex-direction:column;
+    box-shadow:0 24px 68px rgba(0,0,0,.45), 0 0 0 .5px rgba(0,0,0,.28);
+    background:#f6f6f8;
+  }
+  .titlebar {
+    height:38px; flex:none; display:flex; align-items:center; padding:0 14px;
+    background:linear-gradient(#fbfbfd,#f0f0f3); border-bottom:1px solid #dcdce0;
+    position:relative;
+  }
+  .tl { display:flex; gap:8px; }
+  .tl span { width:12px; height:12px; border-radius:50%; display:block; }
+  .tl .r { background:#ff5f57; } .tl .y { background:#febc2e; } .tl .g { background:#28c840; }
+  .window.inactive .tl span { background:#c8c8cd; }
+  .wtitle {
+    position:absolute; left:0; right:0; text-align:center; font-size:13px;
+    font-weight:600; color:#3d3d42; pointer-events:none;
+  }
+  .window.inactive .wtitle { color:#9a9aa0; }
+
+  /* ===== チャット ===== */
+  #win-chat { left:10px; top:44px; width:400px; height:520px; z-index:10; }
+  #win-chat .titlebar { background:#252f47; border-bottom:1px solid #1c2436; }
+  #win-chat .wtitle { color:#c6cede; }
+  .chat-body { flex:1; display:flex; min-height:0; }
+  .chat-side {
+    width:128px; flex:none; background:#2b3854; color:#aeb9d0;
+    padding:10px 0; font-size:12px; overflow:hidden;
+  }
+  .chat-side .ws { color:#fff; font-weight:700; font-size:12.5px; padding:2px 12px 10px;
+    border-bottom:1px solid rgba(255,255,255,.09); margin-bottom:8px; white-space:nowrap; }
+  .chat-side .sec { padding:8px 12px 4px; font-size:10.5px; letter-spacing:.4px; color:#7f8cab; }
+  .chat-side .chn {
+    display:flex; align-items:center; gap:5px; padding:3px 12px; white-space:nowrap;
+  }
+  .chat-side .chn.active { background:#4a63b0; color:#fff; }
+  .chat-side .chn.unread { color:#fff; font-weight:700; }
+  .chat-side .chn .nm { overflow:hidden; text-overflow:ellipsis; flex:1; }
+  .chat-side .chn .bd {
+    min-width:17px; height:16px; border-radius:9px; background:#e5484d; color:#fff;
+    font-size:10px; font-weight:700; display:none; align-items:center; justify-content:center;
+    padding:0 4px; flex:none;
+  }
+  .chat-side .chn .bd.on { display:flex; }
+  .chat-side .dot { width:7px; height:7px; border-radius:50%; background:#4fc463; flex:none; }
+  .chat-main { flex:1; display:flex; flex-direction:column; background:#fff; min-width:0; }
+  .chat-head {
+    flex:none; padding:9px 14px; border-bottom:1px solid #e8e8ec;
+    font-size:13.5px; font-weight:700; color:#1c1c22;
+  }
+  .chat-head small { font-weight:400; color:#8a8a92; margin-left:8px; font-size:11.5px; }
+  #chat-msgs { flex:1; overflow:hidden; padding:10px 12px; display:flex; flex-direction:column; gap:11px; }
+  .msg { display:flex; gap:8px; animation:msgin .25s ease; }
+  @keyframes msgin { from { opacity:0; transform:translateY(6px); } }
+  .msg .av {
+    width:30px; height:30px; border-radius:7px; flex:none; color:#fff;
+    font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center;
+  }
+  .msg .mc { min-width:0; }
+  .msg .mh { display:flex; align-items:baseline; gap:7px; }
+  .msg .mn { font-size:12.5px; font-weight:700; color:#17171c; }
+  .msg .mt { font-size:10.5px; color:#9a9aa2; }
+  .msg .mb { font-size:12.5px; color:#2b2b31; line-height:1.5; word-break:break-word; }
+  .mention { background:#fdedc3; color:#8a5a00; border-radius:3px; padding:0 3px; font-weight:600; }
+  .chat-input { flex:none; margin:0 12px 12px; border:1.5px solid #d9d9de; border-radius:8px;
+    padding:9px 12px; font-size:12.5px; color:#a4a4ac; }
+
+  /* ===== 売上管理スプレッドシート ===== */
+  #win-dash { left:340px; top:58px; width:780px; height:704px; z-index:20; background:#fff; }
+  .ss-menu { flex:none; display:flex; gap:13px; align-items:center; padding:3px 12px;
+    font-size:11.5px; color:#4a4a52; background:#fff; border-bottom:1px solid #ececf0; }
+  .ss-menu .sp { flex:1; }
+  .ss-menu .le { font-size:10.5px; color:#9a9aa2; }
+  .ss-tools { flex:none; display:flex; gap:10px; align-items:center; padding:4px 12px;
+    background:#f6f7f9; border-bottom:1px solid #e6e6ea; font-size:10.5px; color:#6a6a72; }
+  .ss-tools .tb { padding:1px 7px; border-radius:4px; background:#fff; border:1px solid #e0e0e5; }
+  .ss-fx { flex:none; display:flex; align-items:center; gap:9px; padding:3px 12px;
+    background:#fff; border-bottom:1px solid #e6e6ea; font-size:11.5px; }
+  .ss-fx .nb { width:54px; border-right:1px solid #e6e6ea; color:#3a3a42; font-weight:600; }
+  .ss-fx .fx { color:#9a9aa2; font-style:italic; font-size:10.5px; }
+  .ss-fx .fm { color:#2b2b31; font-family:ui-monospace,Menlo,monospace; font-size:11px; }
+  .ss-grid-wrap { flex:1; position:relative; overflow:hidden; background:#fff; }
+  .ss-grid-wrap table { position:absolute; top:0; left:0; border-collapse:collapse;
+    table-layout:fixed; font-size:11px; color:#26262c; }
+  .ss-grid-wrap th, .ss-grid-wrap td { border:1px solid #e2e3e8; padding:0 5px; height:21px;
+    overflow:hidden; white-space:nowrap; font-weight:400; text-align:left; }
+  .ss-grid-wrap th { background:#f8f9fb; color:#8a8a92; text-align:center; font-size:10px; height:20px; }
+  .ss-grid-wrap td.rn { background:#f8f9fb; color:#8a8a92; text-align:center; font-size:9.5px; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  td.c { text-align:center; }
+  td.b { font-weight:700; }
+  td.ttl { background:#fff3b0; font-weight:700; font-size:12px; }
+  td.hdr { background:#eef0f4; font-weight:700; text-align:center; color:#3a3a42; }
+  td.red { color:#d43c3c; }
+  td.ylw { background:#fff3b0; }
+  td.grn { color:#1c6b4a; }
+  td.sel { outline:2px solid #1a73e8; outline-offset:-2px; }
+  .ss-tabs { flex:none; display:flex; gap:2px; align-items:flex-end; padding:2px 10px 0;
+    background:#f1f3f6; border-top:1px solid #e2e3e8; font-size:11px; color:#5a5a62; height:26px; }
+  .ss-tabs .tab { padding:3px 13px; border-radius:6px 6px 0 0; }
+  .ss-tabs .tab.on { background:#fff; font-weight:700; color:#1c6b4a;
+    border:1px solid #e2e3e8; border-bottom:none; }
+  #chart-box { position:absolute; left:40px; top:322px; width:430px; background:#fff;
+    border:1px solid #dadce2; border-radius:4px; box-shadow:0 5px 16px rgba(30,30,60,.16); z-index:3; }
+  #chart-box .cb-t { display:flex; align-items:baseline; gap:12px; padding:7px 12px 0;
+    font-size:11.5px; font-weight:700; color:#33333b; }
+  #chart-box .cb-t .lg { font-weight:400; font-size:10px; color:#8a8a92; }
+  #chart-box #chart { padding:2px 12px 8px; }
+  @keyframes pulseR { 0%,100% { opacity:.55; } 50% { opacity:.08; } }
+  .pulse { animation:pulseR 1.6s ease-in-out infinite; }
+
+  /* ===== メール作成 ===== */
+  #win-mail { left:848px; top:200px; width:612px; height:650px; z-index:30; background:#fff; }
+  .mail-tools { flex:none; display:flex; align-items:center; gap:16px; padding:8px 14px;
+    border-bottom:1px solid #e8e8ec; background:#fafafc; }
+  .mail-tools svg { display:block; }
+  .mfield { flex:none; display:flex; align-items:center; gap:8px; padding:8px 16px;
+    border-bottom:1px solid #ececf0; font-size:13px; }
+  .mfield .fl { color:#8e8e96; flex:none; width:34px; }
+  .chip { background:#e7efff; color:#2456c9; border-radius:11px; padding:2px 10px;
+    font-size:12.5px; font-weight:600; }
+  .msub { font-weight:700; color:#17171c; }
+  .mbody-wrap { flex:1; overflow:hidden; }
+  .mbody {
+    padding:16px 18px; font-size:13.5px; line-height:1.8; color:#1f1f26;
+    white-space:pre-wrap; word-break:break-word;
+    min-height:100%; outline:none; caret-color:#2563eb; cursor:text;
+    user-select:text; -webkit-user-select:text;
+  }
+  .caret { display:inline-block; width:2px; height:17px; background:#2563eb;
+    vertical-align:-3px; margin-left:1px; animation:blink 1.05s steps(1) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+
+  /* ===== 通知バナー ===== */
+  #notifs { position:absolute; top:40px; right:14px; width:356px; z-index:600; }
+  .notif {
+    display:flex; gap:10px; align-items:flex-start; overflow:hidden;
+    background:rgba(246,246,249,.78); backdrop-filter:blur(26px);
+    border-radius:15px; padding:11px 13px; margin-bottom:9px;
+    box-shadow:0 10px 30px rgba(0,0,0,.30), inset 0 0 0 .5px rgba(255,255,255,.45);
+    transform:translateX(118%);
+    transition:transform .5s cubic-bezier(.18,1.1,.28,1), opacity .32s ease,
+      max-height .34s ease, margin-bottom .34s ease, padding-top .34s ease, padding-bottom .34s ease;
+    max-height:120px;
+  }
+  .notif.in { transform:none; }
+  .notif.out { opacity:0; transform:translateX(55%); max-height:0; margin-bottom:0;
+    padding-top:0; padding-bottom:0; }
+  .nicon { width:38px; height:38px; border-radius:9px; flex:none;
+    display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,.18); }
+  .nicon svg { width:23px; height:23px; }
+  .ncontent { flex:1; min-width:0; }
+  .nrow { display:flex; align-items:baseline; gap:8px; }
+  .ntitle { font-size:13px; font-weight:700; color:#141419; flex:1;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ntime { font-size:11px; color:#6e6e76; flex:none; }
+  .nbody { font-size:12.5px; color:#3a3a41; line-height:1.4; margin-top:1px;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+
+  /* ===== ドック ===== */
+  #dock {
+    position:absolute; bottom:8px; left:50%; transform:translateX(-50%); z-index:500;
+    display:flex; gap:11px; align-items:flex-end; padding:9px 13px;
+    background:rgba(255,255,255,.30); backdrop-filter:blur(30px);
+    border-radius:22px; box-shadow:inset 0 0 0 .5px rgba(255,255,255,.4), 0 8px 30px rgba(0,0,0,.25);
+  }
+  .dockicon { width:54px; height:54px; border-radius:13px; position:relative;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 6px rgba(0,0,0,.22); }
+  .dockicon svg { width:32px; height:32px; }
+  .dbadge {
+    position:absolute; top:-6px; right:-7px; min-width:21px; height:21px; border-radius:11px;
+    background:#ff3b30; color:#fff; font-size:12px; font-weight:700;
+    display:none; align-items:center; justify-content:center; padding:0 6px;
+    box-shadow:0 1px 3px rgba(0,0,0,.35);
+  }
+  .dbadge.on { display:flex; }
+  @keyframes bounce {
+    0%,100% { transform:none; } 28% { transform:translateY(-20px); }
+    52% { transform:none; } 72% { transform:translateY(-9px); }
+  }
+  .dockicon.bounce { animation:bounce .85s ease; }
+
+  /* ===== カレンダー ===== */
+  #win-cal { left:8px; top:578px; width:478px; height:292px; z-index:8; }
+  .cal-wrap { flex:1; display:flex; flex-direction:column; background:#fff; min-height:0; }
+  .cal-days { flex:none; display:flex; border-bottom:1px solid #e8e8ec; padding-left:34px; }
+  .cal-days .cd { flex:1; text-align:center; font-size:10.5px; color:#71717b; padding:4px 0; }
+  .cal-days .cd b { font-weight:700; margin-right:1px; }
+  .cal-days .cd.today b { background:#ff453a; color:#fff; border-radius:9px; padding:1px 6.5px; }
+  .cal-grid { flex:1; position:relative; overflow:hidden; }
+  .cal-grid .hline { position:absolute; left:34px; right:0; border-top:1px solid #f0f0f3; }
+  .cal-grid .hlab { position:absolute; left:5px; font-size:8.5px; color:#a0a0aa; transform:translateY(-50%); }
+  .cal-grid .vline { position:absolute; top:0; bottom:0; border-left:1px solid #f0f0f3; }
+  .cal-grid .todaybg { position:absolute; top:0; bottom:0; background:rgba(59,130,246,.07); }
+  .cal-ev { position:absolute; border-radius:4px; padding:1px 4px; font-size:9px; line-height:1.2;
+    color:#fff; overflow:hidden; font-weight:600; white-space:nowrap;
+    box-shadow:0 0 0 1px rgba(255,255,255,.75); }
+  .cal-now { position:absolute; left:34px; right:0; border-top:1.5px solid #ff3b30; z-index:5; }
+  .cal-now::before { content:''; position:absolute; left:-2px; top:-4.5px; width:7px; height:7px;
+    border-radius:50%; background:#ff3b30; }
+
+  /* ===== 操作ヒント ===== */
+  #hint {
+    position:fixed; left:14px; bottom:14px; z-index:900;
+    background:rgba(20,20,28,.78); color:#e8e8ee; font-size:13px;
+    border-radius:10px; padding:10px 14px; line-height:1.7;
+    backdrop-filter:blur(10px); transition:opacity .6s;
+  }
+  #hint.gone { opacity:0; pointer-events:none; }
+  #hint b { color:#ffd60a; font-weight:700; margin-right:2px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="menubar">
+    <div class="logo"></div>
+    <span class="appname">メール</span>
+    <span class="mi">ファイル</span><span class="mi">編集</span><span class="mi">表示</span>
+    <span class="mi">メッセージ</span><span class="mi">ウインドウ</span><span class="mi">ヘルプ</span>
+    <span class="sp"></span>
+    <div class="stat">
+      <span class="ime">あ</span>
+      <svg width="17" height="13" viewBox="0 0 17 13" fill="none">
+        <path d="M8.5 12.2 1 4.9a10.6 10.6 0 0 1 15 0z" fill="#1d1d21" opacity=".9"/>
+      </svg>
+      <span style="display:flex;align-items:center;gap:4px;">
+        <span style="font-size:12px;">84%</span>
+        <svg width="25" height="12" viewBox="0 0 25 12">
+          <rect x=".5" y=".5" width="21" height="11" rx="3" fill="none" stroke="#1d1d21" stroke-opacity=".5"/>
+          <rect x="2" y="2" width="15" height="8" rx="1.6" fill="#1d1d21" opacity=".85"/>
+          <path d="M23 4v4a2.2 2.2 0 0 0 0-4z" fill="#1d1d21" opacity=".5"/>
+        </svg>
+      </span>
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <circle cx="6" cy="6" r="4.4" stroke="#1d1d21" stroke-width="1.5" opacity=".85"/>
+        <path d="m9.4 9.4 3 3" stroke="#1d1d21" stroke-width="1.5" stroke-linecap="round" opacity=".85"/>
+      </svg>
+      <span id="clock"></span>
+    </div>
+  </div>
+
+  <!-- チャット -->
+  <div class="window inactive" id="win-chat">
+    <div class="titlebar"><div class="tl"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+      <div class="wtitle">社内チャット — アオバフーズ</div></div>
+    <div class="chat-body">
+      <div class="chat-side">
+        <div class="ws">アオバフーズ</div>
+        <div class="sec">チャンネル</div>
+        <div class="chn" data-ch="# 全社連絡"><span class="nm"># 全社連絡</span><span class="bd"></span></div>
+        <div class="chn active" data-ch="# ケータリング"><span class="nm"># ケータリング</span><span class="bd"></span></div>
+        <div class="chn" data-ch="# 受注-配達"><span class="nm"># 受注-配達</span><span class="bd"></span></div>
+        <div class="chn" data-ch="# メニュー開発"><span class="nm"># メニュー開発</span><span class="bd"></span></div>
+        <div class="chn" data-ch="# 社内ツール-開発"><span class="nm"># 社内ツール-開発</span><span class="bd"></span></div>
+        <div class="chn" data-ch="# 営業"><span class="nm"># 営業</span><span class="bd"></span></div>
+        <div class="chn" data-ch="# 採用"><span class="nm"># 採用</span><span class="bd"></span></div>
+        <div class="chn" data-ch="# 顧客サポート"><span class="nm"># 顧客サポート</span><span class="bd"></span></div>
+        <div class="chn" data-ch="# 経理-総務"><span class="nm"># 経理-総務</span><span class="bd"></span></div>
+        <div class="chn" data-ch="# 勉強会"><span class="nm"># 勉強会</span><span class="bd"></span></div>
+        <div class="chn" data-ch="# ニュース共有"><span class="nm"># ニュース共有</span><span class="bd"></span></div>
+        <div class="chn" data-ch="# 雑談"><span class="nm"># 雑談</span><span class="bd"></span></div>
+        <div class="sec">DM</div>
+        <div class="chn" data-ch="桐生"><span class="dot"></span><span class="nm">桐生</span><span class="bd"></span></div>
+        <div class="chn" data-ch="小森"><span class="dot"></span><span class="nm">小森</span><span class="bd"></span></div>
+        <div class="chn" data-ch="三浦"><span class="dot"></span><span class="nm">三浦</span><span class="bd"></span></div>
+        <div class="chn" data-ch="早瀬"><span class="dot" style="background:#c2c9d8"></span><span class="nm">早瀬</span><span class="bd"></span></div>
+        <div class="chn" data-ch="柴崎"><span class="dot" style="background:#c2c9d8"></span><span class="nm">柴崎</span><span class="bd"></span></div>
+      </div>
+      <div class="chat-main">
+        <div class="chat-head"># ケータリング<small>メンバー 8人</small></div>
+        <div id="chat-msgs"></div>
+        <div class="chat-input"># ケータリング へのメッセージ</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- カレンダー -->
+  <div class="window inactive" id="win-cal">
+    <div class="titlebar"><div class="tl"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+      <div class="wtitle" id="cal-title">カレンダー</div></div>
+    <div class="cal-wrap">
+      <div class="cal-days" id="cal-days"></div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+  </div>
+
+  <!-- 売上管理スプレッドシート -->
+  <div class="window inactive" id="win-dash">
+    <div class="titlebar"><div class="tl"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+      <div class="wtitle">ケータリング事業 売上管理_7月_最新版(2) — スプレッドシート</div></div>
+    <div class="ss-menu">
+      <svg width="13" height="15" viewBox="0 0 13 15"><rect width="13" height="15" rx="2" fill="#1c8a5a"/><path d="M3.5 4.5h6M3.5 7.5h6M3.5 10.5h6" stroke="#fff" stroke-width="1.3"/></svg>
+      <span>ファイル</span><span>編集</span><span>表示</span><span>挿入</span><span>表示形式</span><span>データ</span><span>ツール</span>
+      <span class="sp"></span><span class="le">最終編集: 数分前（小森さん）</span>
+    </div>
+    <div class="ss-tools">
+      <span class="tb">100%</span><span class="tb">¥</span><span class="tb">%</span><span class="tb">.00</span>
+      <span class="tb">罫線</span><span class="tb">塗りつぶし</span><span class="tb">フィルタ</span>
+    </div>
+    <div class="ss-fx"><span class="nb">F14</span><span class="fx">fx</span><span class="fm">=SUM(F6:F13)</span></div>
+    <div class="ss-grid-wrap" id="ss-grid">
+      <div id="chart-box">
+        <div class="cb-t">累計売上と目標ペース（7月）
+          <span class="lg"><span style="color:#3b82f6">━ 実績</span>　<span style="color:#a0a0aa">┄ 目標ペース</span></span>
+        </div>
+        <div id="chart"></div>
+      </div>
+    </div>
+    <div class="ss-tabs">
+      <span class="tab on">7月</span><span class="tab">6月</span><span class="tab">8月見込み</span>
+      <span class="tab">注文一覧</span><span class="tab">メニューマスタ(旧)</span><span class="tab">＋</span>
+    </div>
+  </div>
+
+  <!-- メール作成 -->
+  <div class="window" id="win-mail">
+    <div class="titlebar"><div class="tl"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+      <div class="wtitle">【ご報告】ケータリング事業 7月の進捗について</div></div>
+    <div class="mail-tools">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none">
+        <path d="M3.4 20.4 21 12 3.4 3.6 3.3 10l12 2-12 2z" fill="#2563eb"/>
+      </svg>
+      <span style="flex:1"></span>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+        <path d="M21 12.5 12.6 21a5.7 5.7 0 0 1-8-8L13 4.6a4 4 0 0 1 5.7 5.7L10.4 18.5a2.3 2.3 0 0 1-3.2-3.2L15 7.5" stroke="#8e8e96" stroke-width="1.7" stroke-linecap="round"/>
+      </svg>
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+        <path d="M4 19 10.5 4h1.4L18 19h-2.1l-1.7-4.2H7.7L6.1 19zm4.4-6h5.1l-2.5-6.4z" fill="#8e8e96"/>
+      </svg>
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+        <rect x="3" y="5" width="18" height="14" rx="2" stroke="#8e8e96" stroke-width="1.6"/>
+        <circle cx="8.6" cy="10" r="1.7" fill="#8e8e96"/>
+        <path d="m5 17 4.6-4.4 3 2.8 3.4-3.4L20 16" stroke="#8e8e96" stroke-width="1.6" fill="none"/>
+      </svg>
+    </div>
+    <div class="mfield"><span class="fl">宛先:</span><span class="chip">桐生 誠</span></div>
+    <div class="mfield"><span class="fl">Cc:</span><span class="chip">ケータリング事業チーム</span></div>
+    <div class="mfield"><span class="fl">件名:</span><span class="msub">【ご報告】ケータリング事業 7月の進捗について</span></div>
+    <div class="mbody-wrap" id="mbody-wrap">
+      <div class="mbody" id="mbody" contenteditable="true" spellcheck="false"></div>
+    </div>
+  </div>
+
+  <div id="notifs"></div>
+  <div id="dock"></div>
+</div>
+
+<div id="hint">
+  メール本文はクリックしてそのまま入力できる（<b>Esc</b> で選択解除）<br>
+  <b>F</b> 全画面　<b>M</b> 通知音　<b>1·2·3</b> 通知の量（少・中・多）<br>
+  <b>B</b> 通知を一気に出す　<b>T</b> 本文の自動タイプ　<b>P</b> 一時停止　<b>H</b> この表示
+</div>
+
+<script>
+'use strict';
+/* ================= 全体設定 ================= */
+let intensity = 1.0;          // 1: ふつう（キー1=1.8, 2=1.0, 3=0.42）
+let paused = false;
+let soundOn = false;
+let actx = null;
+let typeHoldUntil = 0;
+
+const $ = s => document.querySelector(s);
+const rand = (a, b) => a + Math.random() * (b - a);
+const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ================= 拡縮 ================= */
+const stage = $('#stage');
+function fit() {
+  const s = Math.min(innerWidth / 1470, innerHeight / 956);
+  stage.style.transform =
+    `translate(${(innerWidth - 1470 * s) / 2}px, ${(innerHeight - 956 * s) / 2}px) scale(${s})`;
+}
+addEventListener('resize', fit); fit();
+
+/* ================= 時計 ================= */
+const WDAYS = ['日','月','火','水','木','金','土'];
+function fmtTime(d) {
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function tickClock() {
+  const d = new Date();
+  $('#clock').textContent =
+    `${d.getMonth()+1}月${d.getDate()}日(${WDAYS[d.getDay()]}) ${fmtTime(d)}`;
+}
+tickClock(); setInterval(tickClock, 5000);
+
+/* ================= アプリ定義（架空のアイコン） ================= */
+const APPS = {
+  folder: { grad:'linear-gradient(145deg,#8ec9ff,#4a9aef)', svg:'<svg viewBox="0 0 24 24"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4l2 2.5h7A2.5 2.5 0 0 1 21 9v8.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z" fill="#fff"/></svg>' },
+  browser:{ grad:'linear-gradient(145deg,#6db6ff,#2f7fe8)', svg:'<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.4" stroke="#fff" stroke-width="1.7"/><ellipse cx="12" cy="12" rx="3.8" ry="8.4" stroke="#fff" stroke-width="1.4"/><path d="M4 9.4h16M4 14.6h16" stroke="#fff" stroke-width="1.4"/></svg>' },
+  chat:   { grad:'linear-gradient(145deg,#7189ff,#3d4fd8)', svg:'<svg viewBox="0 0 24 24"><path d="M12 3.2c-5 0-9 3.3-9 7.4 0 2.2 1.2 4.2 3 5.5-.1 1-.5 2.4-1.5 3.6 1.9-.2 3.4-.9 4.4-1.6.98.26 2 .4 3.1.4 5 0 9-3.3 9-7.4s-4-7.9-9-7.9z" fill="#fff"/></svg>' },
+  mail:   { grad:'linear-gradient(145deg,#5aa8ff,#1d63e8)', svg:'<svg viewBox="0 0 24 24"><rect x="2.6" y="4.8" width="18.8" height="14.4" rx="2.4" fill="#fff"/><path d="m3.6 6.6 8.4 6.3 8.4-6.3" stroke="#1d63e8" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>' },
+  cal:    { grad:'linear-gradient(#ffffff,#f0f0f2)', svg:'<svg viewBox="0 0 24 24"><rect x="2.8" y="3.4" width="18.4" height="17.6" rx="3" fill="#fff"/><path d="M2.8 8.6V6.4a3 3 0 0 1 3-3h12.4a3 3 0 0 1 3 3v2.2z" fill="#ff453a"/><text x="12" y="17.6" font-size="9.5" font-weight="700" fill="#1c1c1e" text-anchor="middle" font-family="-apple-system,sans-serif">16</text></svg>' },
+  task:   { grad:'linear-gradient(145deg,#ffb054,#f07f1f)', svg:'<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.4" stroke="#fff" stroke-width="2"/><path d="m8.4 12.3 2.5 2.5 4.8-5.3" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
+  video:  { grad:'linear-gradient(145deg,#4cd471,#1fa84a)', svg:'<svg viewBox="0 0 24 24"><rect x="2.6" y="6.6" width="12.6" height="10.8" rx="2.6" fill="#fff"/><path d="m16.4 10.6 5-2.8v8.4l-5-2.8z" fill="#fff"/></svg>' },
+  form:   { grad:'linear-gradient(145deg,#2fc4b2,#0e9488)', svg:'<svg viewBox="0 0 24 24"><rect x="4.5" y="4" width="15" height="17" rx="2.5" fill="#fff"/><rect x="8.5" y="2.2" width="7" height="3.6" rx="1.4" fill="#bfe9e4"/><path d="M8 10h8M8 13.5h8M8 17h5" stroke="#0e9488" stroke-width="1.6" stroke-linecap="round"/></svg>' },
+  dash:   { grad:'linear-gradient(145deg,#3d4557,#20242f)', svg:'<svg viewBox="0 0 24 24"><rect x="4" y="12.5" width="3.6" height="7.5" rx="1.1" fill="#8fd3ff"/><rect x="10.2" y="8" width="3.6" height="12" rx="1.1" fill="#fff"/><rect x="16.4" y="4.5" width="3.6" height="15.5" rx="1.1" fill="#ffd60a"/></svg>' },
+};
+
+/* ================= ドック ================= */
+const DOCK_ORDER = ['folder','browser','chat','mail','cal','form','task','video','dash'];
+const badges = { chat:268, mail:1842, cal:6, form:57, task:23, video:2 };
+const dockEls = {};
+(function buildDock() {
+  const dock = $('#dock');
+  for (const k of DOCK_ORDER) {
+    const d = document.createElement('div');
+    d.className = 'dockicon';
+    d.style.background = APPS[k].grad;
+    d.innerHTML = APPS[k].svg + '<span class="dbadge"></span>';
+    dock.appendChild(d);
+    dockEls[k] = d;
+  }
+  for (const k in badges) renderBadge(k);
+})();
+function renderBadge(k) {
+  const el = dockEls[k] && dockEls[k].querySelector('.dbadge');
+  if (!el) return;
+  const n = badges[k] || 0;
+  el.classList.toggle('on', n > 0);
+  el.textContent = n > 9999 ? '9,999+' : n.toLocaleString('ja-JP');
+}
+function bumpBadge(k, n = 1) { badges[k] = (badges[k] || 0) + n; renderBadge(k); }
+function bounceDock(k) {
+  const el = dockEls[k]; if (!el) return;
+  el.classList.remove('bounce'); void el.offsetWidth; el.classList.add('bounce');
+}
+
+/* ================= 通知音 ================= */
+function ping(kind) {
+  if (!soundOn || !actx) return;
+  const t0 = actx.currentTime;
+  const seq = kind === 'mail' ? [[880,0],[1174.7,.09]]
+            : kind === 'chat' ? [[987.8,0],[1318.5,.08]]
+            : [[659.3,0],[880,.1]];
+  for (const [f, dt] of seq) {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(0, t0 + dt);
+    g.gain.linearRampToValueAtTime(.09, t0 + dt + .012);
+    g.gain.exponentialRampToValueAtTime(.0001, t0 + dt + .32);
+    o.connect(g); g.connect(actx.destination);
+    o.start(t0 + dt); o.stop(t0 + dt + .4);
+  }
+}
+
+/* ================= 通知バナー ================= */
+const nstack = $('#notifs');
+function notify(app, title, body) {
+  const el = document.createElement('div');
+  el.className = 'notif';
+  el.innerHTML =
+    `<div class="nicon" style="background:${APPS[app].grad}">${APPS[app].svg}</div>` +
+    `<div class="ncontent"><div class="nrow"><span class="ntitle">${esc(title)}</span>` +
+    `<span class="ntime">今</span></div><div class="nbody">${esc(body)}</div></div>`;
+  nstack.prepend(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
+  [...nstack.children].filter(c => !c.dataset.out).slice(6).forEach(dismiss);
+  setTimeout(() => dismiss(el), 8200);
+  ping(app); bounceDock(app);
+  typeHoldUntil = performance.now() + rand(500, 1100); // 打鍵が一瞬止まる
+}
+function dismiss(el) {
+  if (!el || el.dataset.out) return;
+  el.dataset.out = '1';
+  el.classList.add('out');
+  setTimeout(() => el.remove(), 420);
+}
+
+/* ================= 文言プール ================= */
+const CHAT_TEAM = [ // # ケータリング に表示されるもの
+  { from:'小森', text:'@高橋さん 来週の大口納品、配達先リストの最新版もらえますか？', mention:true },
+  { from:'三浦', text:'明日の立食パーティー、会場の下見15時からやります', mention:false },
+  { from:'桐生', text:'@高橋さん 7月の注文状況、夕方の定例で共有お願いします', mention:true },
+  { from:'柴崎', text:'秋の新メニュー表、最新版をアップしました', mention:false },
+  { from:'早瀬', text:'ミライ製造さまから納品日変更のご相談きてます', mention:false },
+  { from:'小森', text:'アンケート集計終わりました。満足度4.6です！', mention:false },
+  { from:'三浦', text:'@高橋さん 明日の配達ルート表、共有お願いできますか？', mention:true },
+  { from:'柴崎', text:'保冷ボックス、配達件数分そろえました', mention:false },
+  { from:'早瀬', text:'@高橋さん 見積書の承認お願いします', mention:true },
+];
+const CHAT_OTHER = [ // 別チャンネル・DM（バッジと通知のみ）
+  { from:'桐生', ch:'桐生', text:'例の新プランの件、5分だけお時間いいですか？' },
+  { from:'小森', ch:'小森', text:'さっきの注文の件、急ぎでご相談です' },
+  { from:'柴崎', ch:'柴崎', text:'請求書フォルダのリンク、権限なくて開けないです…' },
+  { from:'早瀬', ch:'# 全社連絡', text:'経費精算の締切は本日17:00です。未提出の方はお急ぎください' },
+  { from:'三浦', ch:'# 全社連絡', text:'本日の全体定例は15:00開始に変更です' },
+  { from:'三浦', ch:'# 顧客サポート', text:'お客様から注文フォームが開けないと問い合わせがきてます' },
+  { from:'小森', ch:'# 受注-配達', text:'来週の納品、保冷車を1台追加で手配しました' },
+];
+const MAILS = [
+  { from:'川村 恵（ミライ製造 総務部）', sub:'ケータリング定期利用のご相談' },
+  { from:'長門 悟（ナガト精機）', sub:'会議弁当のお見積もり依頼' },
+  { from:'黒川 藍（クロカワ商事）', sub:'納品日変更のご相談' },
+  { from:'経理', sub:'請求書発行のお願い（7月納品分）' },
+  { from:'地域イベント事務局', sub:'出店資料のご提出期限について' },
+  { from:'システム管理', sub:'【重要】パスワードの有効期限が近づいています' },
+  { from:'お客様アンケート', sub:'本日の配達のアンケートが5件届いています' },
+];
+const FORMS = [ // 注文・問い合わせ
+  { t:'新規注文', b:'パーティーオードブル（7/28納品）に新しい注文' },
+  { t:'新規注文', b:'会議弁当（8/5納品）に新しい注文' },
+  { t:'新規注文', b:'オードブルセットの受付枠が残り3になりました' },
+  { t:'お問い合わせ', b:'社員食堂ケータリングのご相談が届きました（従業員300名規模）' },
+  { t:'試食会', b:'明日11:00の予約が入りました' },
+];
+const CALS = [
+  { t:'ミライ製造さま お打ち合わせ', b:'15分後に開始 · オンライン' },
+  { t:'大口納品 段取り確認', b:'30分後に開始' },
+  { t:'1on1（桐生さん）', b:'まもなく開始' },
+  { t:'ケータリング事業定例', b:'15:00に開始 · 会議室A' },
+  { t:'試食会 準備（明日）', b:'10分後に開始' },
+];
+const TASKS = [
+  { t:'期限超過: メニュー表の改訂', b:'期限: 昨日 18:00' },
+  { t:'本日期限: お客様アンケートの集計', b:'期限: 今日 17:00' },
+  { t:'リマインド: 8月の新メニュー告知文', b:'期限: 今日' },
+];
+const CALLS = [
+  { t:'不在着信', b:'小森' },
+  { t:'会議への招待', b:'桐生 — 新プランのご相談' },
+];
+
+/* 順繰りに取り出す（直近の繰り返しを避ける） */
+function rotator(arr) {
+  let pool = [];
+  return () => {
+    if (!pool.length) pool = arr.slice().sort(() => Math.random() - .5);
+    return pool.pop();
+  };
+}
+const nextTeam = rotator(CHAT_TEAM), nextOther = rotator(CHAT_OTHER),
+      nextMail = rotator(MAILS), nextCal = rotator(CALS),
+      nextTask = rotator(TASKS), nextCall = rotator(CALLS),
+      nextForm = rotator(FORMS);
+
+/* ================= チャット画面 ================= */
+const AV_COLORS = { '桐生':'#5470d6', '柴崎':'#2f9e6e', '三浦':'#c9702e',
+                    '早瀬':'#8e5bc9', '小森':'#e06c75', '高橋':'#5b8aa6' };
+const msgsEl = $('#chat-msgs');
+function renderMention(text) {
+  return esc(text).replace(/@高橋さん/g, '<span class="mention">@高橋さん</span>');
+}
+function addChatMsg(from, text, when) {
+  const div = document.createElement('div');
+  div.className = 'msg';
+  div.innerHTML =
+    `<div class="av" style="background:${AV_COLORS[from] || '#8a8a92'}">${esc(from[0])}</div>` +
+    `<div class="mc"><div class="mh"><span class="mn">${esc(from)}</span>` +
+    `<span class="mt">${when}</span></div><div class="mb">${renderMention(text)}</div></div>`;
+  msgsEl.appendChild(div);
+  while (msgsEl.children.length > 40) msgsEl.firstElementChild.remove();
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+}
+function bumpChannel(ch, n = 1) {
+  const el = document.querySelector(`.chn[data-ch="${ch}"] .bd`);
+  if (!el) return;
+  const v = (+el.dataset.n || 0) + n;
+  el.dataset.n = v;
+  el.textContent = v > 999 ? '999+' : v;
+  el.classList.add('on');
+  el.closest('.chn').classList.add('unread');
+}
+(function prefillChat() {
+  const now = new Date();
+  const ago = m => fmtTime(new Date(now - m * 60000));
+  addChatMsg('三浦', '昨日の納品の振り返り、まとめておきました', ago(58));
+  addChatMsg('柴崎', 'メニュー表のフォルダ、構成を整理しました', ago(45));
+  addChatMsg('桐生', '7月の見込み、今日中にそろえましょう', ago(37));
+  addChatMsg('小森', '先週のアンケート結果、共有フォルダに置きました', ago(22));
+  addChatMsg('早瀬', '@高橋さん 例の見積の件、あとでDMします', ago(9));
+  const seed = { '# 全社連絡':12, '# 受注-配達':34, '# メニュー開発':18, '# 社内ツール-開発':156,
+    '# 営業':31, '# 採用':8, '# 顧客サポート':89, '# 経理-総務':4, '# 勉強会':11,
+    '# ニュース共有':67, '# 雑談':23, '桐生':2, '小森':3, '三浦':5, '早瀬':2, '柴崎':1 };
+  for (const ch in seed) bumpChannel(ch, seed[ch]);
+})();
+
+/* ================= 売上管理スプレッドシート ================= */
+const GOAL = 10000000;
+const sales = 4375000; // シートの合計行と一致させた固定値（手作業のシートなので勝手には動かない）
+const cum = [170,390,640,900,1120,1370,1620,1760,1870,1960,2060,2170,2520,2950,3500,4375]
+  .map(v => v * 1000);
+const fmtNum = v => Math.round(v).toLocaleString('ja-JP');
+
+(function buildSheet() {
+  const COLW = [32,52,118,92,40,74,84,40,130,90,90]; // 行番号 + A〜J
+  const LET = ['','A','B','C','D','E','F','G','H','I','J'];
+  const td = (c, cls, span) =>
+    `<td${cls ? ` class="${cls}"` : ''}${span ? ` colspan="${span}"` : ''}>${c}</td>`;
+  const data = [ // 納品日, プラン, 納品先, 食数, 単価, 金額, 入金, 備考
+    ['7/2','懇親会オードブル','ミライ製造',120,'3,500','420,000','済',''],
+    ['7/4','会議弁当（定期）','ナガト精機',260,'1,200','312,000','済',''],
+    ['7/7','立食パーティー','クロカワ商事',150,'4,800','720,000','済','大口'],
+    ['7/9','ロケ弁当','ツバキ企画',90,'1,500','135,000','未','請求書再送'],
+    ['7/10','表彰式ケータリング','ミドリ食品',200,'5,500','1,100,000','済','設営込み'],
+    ['7/14','会議弁当（定期）','ホシノ電装',180,'1,300','234,000','未',''],
+    ['7/15','オードブルセット','カジワラ印刷',60,'3,000','180,000','未','アンケート集計中'],
+    ['7/16','立食パーティー','ヒカリ物流',260,'4,900','1,274,000','未','本日納品'],
+  ];
+  const pace = GOAL * 16 / 31;
+  let html = `<table><colgroup>${COLW.map(w => `<col style="width:${w}px">`).join('')}</colgroup>`;
+  html += `<tr>${LET.map(l => `<th>${l}</th>`).join('')}</tr>`;
+  html += `<tr><td class="rn">1</td>${td('ケータリング事業 売上管理（2026年7月）【最新】','ttl',6)}${td('')}${td('')}${td('')}${td('')}</tr>`;
+  html += `<tr><td class="rn">2</td>${td('')}${td('月間目標','hdr')}${td('累計売上','hdr',2)}${td('達成率','hdr',2)}${td('対目標ペース','hdr',2)}${td('')}${td('')}</tr>`;
+  html += `<tr><td class="rn">3</td>${td('')}${td(fmtNum(GOAL),'num')}${td(fmtNum(sales),'num b ylw',2)}${td((sales / GOAL * 100).toFixed(1) + '%','num b',2)}${td(((sales / pace - 1) * 100).toFixed(1) + '%（遅れ）','num b red',2)}${td('')}${td('')}</tr>`;
+  html += `<tr><td class="rn">4</td>${td('※ 入金状況は経理の管理表と突き合わせて手動更新（7/10以降 未反映）','red',10)}</tr>`;
+  html += `<tr><td class="rn">5</td>${['納品日','プラン','納品先','食数','単価','金額','入金','備考'].map(h => td(h,'hdr')).join('')}${td('')}${td('')}</tr>`;
+  data.forEach((r, i) => {
+    html += `<tr><td class="rn">${i + 6}</td>${td(r[0])}${td(r[1])}${td(r[2])}${td(r[3],'c')}` +
+      `${td(r[4],'num')}${td(r[5],'num')}${td(r[6], r[6] === '済' ? 'c grn' : 'c red b')}${td(r[7])}${td('')}${td('')}</tr>`;
+  });
+  html += `<tr><td class="rn">14</td>${td('')}${td('')}${td('')}${td('')}${td('合計','b num')}${td(fmtNum(sales),'num b sel')}${td('')}${td('')}${td('')}${td('')}</tr>`;
+  for (let i = 15; i <= 26; i++) {
+    html += `<tr><td class="rn">${i}</td>${Array(10).fill('<td></td>').join('')}</tr>`;
+  }
+  html += `</table>`;
+  $('#ss-grid').insertAdjacentHTML('afterbegin', html);
+})();
+
+/* シート上の埋め込みグラフ */
+const CW = 404, CH = 192, L = 50, R = 10, T = 12, B = 22, YMAX = 11000000;
+const xd = d => L + (d - 1) / 30 * (CW - L - R);
+const yv = v => T + (1 - v / YMAX) * (CH - T - B);
+(function buildChart() {
+  cum[15] = sales;
+  const pts = cum.map((v, i) => `${xd(i + 1).toFixed(1)},${yv(v).toFixed(1)}`).join(' ');
+  let grid = '', xlab = '';
+  for (const g of [0, 2500000, 5000000, 7500000, 10000000]) {
+    grid += `<line x1="${L}" y1="${yv(g)}" x2="${CW - R}" y2="${yv(g)}" stroke="#e8eaef"/>` +
+      `<text x="${L - 7}" y="${yv(g) + 3}" font-size="9" fill="#9a9aa2" text-anchor="end">` +
+      (g ? (g / 10000).toLocaleString('ja-JP') + '万' : '0') + `</text>`;
+  }
+  for (const d of [1, 10, 20, 31]) {
+    xlab += `<text x="${xd(d)}" y="${CH - 8}" font-size="9" fill="#9a9aa2" text-anchor="middle">${d}日</text>`;
+  }
+  $('#chart').innerHTML =
+`<svg width="${CW}" height="${CH}" viewBox="0 0 ${CW} ${CH}">
+  ${grid}${xlab}
+  <line x1="${xd(16)}" y1="${T}" x2="${xd(16)}" y2="${CH - B}" stroke="#d5d9e2" stroke-dasharray="3 3"/>
+  <text x="${xd(16)}" y="${T + 2}" font-size="8.5" fill="#a0a0aa" text-anchor="middle" dy="-1">今日</text>
+  <line x1="${xd(1)}" y1="${yv(GOAL / 31)}" x2="${xd(31)}" y2="${yv(GOAL)}"
+    stroke="#a8adb9" stroke-width="1.8" stroke-dasharray="6 5"/>
+  <polyline points="${pts}" fill="none" stroke="#3b82f6"
+    stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle class="pulse" cx="${xd(16)}" cy="${yv(sales)}" r="9" fill="#3b82f6"/>
+  <circle cx="${xd(16)}" cy="${yv(sales)}" r="3.6" fill="#3b82f6" stroke="#fff" stroke-width="1.5"/>
+</svg>`;
+})();
+
+/* ================= カレンダー（今週・みっちり） ================= */
+(function buildCal() {
+  const grid = $('#cal-grid'), daysEl = $('#cal-days');
+  const H0 = 8, H1 = 20;
+  const today = new Date();
+  $('#cal-title').textContent = `カレンダー — ${today.getFullYear()}年${today.getMonth()+1}月`;
+  const mon = new Date(today);
+  mon.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const tIdx = Math.min(4, (today.getDay() + 6) % 7);
+  let dh = '';
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(mon); d.setDate(mon.getDate() + i);
+    dh += `<div class="cd${i === tIdx ? ' today' : ''}"><b>${d.getDate()}</b>（${WDAYS[d.getDay()]}）</div>`;
+  }
+  daysEl.innerHTML = dh;
+
+  const GW = grid.clientWidth || 478, GH = grid.clientHeight || 230;
+  const LAB = 34, dayW = (GW - LAB) / 5;
+  const yh = h => (h - H0) / (H1 - H0) * GH;
+
+  // [開始時刻, 長さ(時間), 予定名, 色番号, 半分表示(0=左/1=右)]
+  const EVCOLS = ['#5470d6', '#2f9e6e', '#c9702e', '#8e5bc9', '#c94f4f'];
+  const EVS = [
+    [[8.5,.5,'朝会',0],[9,2,'大口納品 立ち会い',1],[11,1,'振り返り・議事録',2],[12,1,'ランチMTG',3],[13,1.5,'ミライ製造 打ち合わせ',4],[14.5,1.5,'メニュー表改訂',0],[16,1,'見積対応',2],[17,1.5,'法人プランの企画',3],[18.5,1,'週次報告',1]],
+    [[8.5,.5,'朝会',0],[9,1,'注文対応',2],[10,1.5,'新メニュー考案',1],[11.5,1,'1on1（小森さん）',3],[12.5,.5,'昼食',0],[13,2,'表彰式ケータリング 準備',4],[15,1.5,'クロカワ商事 商談',1,0],[15,1,'厨房 打ち合わせ',3,1],[16.5,1,'アンケート集計',2],[17.5,1,'請求書発行',0],[18.5,1,'メニュー試作会',4]],
+    [[8.5,.5,'朝会',0],[9,3,'立食パーティー 現場対応',3],[12,.5,'移動',0],[12.5,1,'昼食・メール対応',2],[13.5,1.5,'納品の振り返り',1],[15,1.5,'勉強会 資料作成',4],[16.5,1,'ナガト精機 打ち合わせ',2],[17.5,1,'受付枠フォロー',0],[18.5,1.5,'8月メニューの告知準備',1]],
+    [[8.5,.5,'朝会',0],[9,1.5,'注文リスト整備',1],[10.5,1.5,'ミライ製造 追加提案',4],[12,.5,'昼食',0],[12.5,1.5,'報告資料の作成',2],[14,1,'試食会 準備',3],[15,1.5,'事業定例',3,0],[15,1,'1on1（桐生さん）',1,1],[16.5,1,'お見積・お電話',0],[17.5,1,'配達ルート確認',4],[18.5,1.5,'日報・残務',2]],
+    [[8.5,.5,'朝会',0],[9,2,'ヒカリ物流 納品立ち会い',1],[11,1,'振り返り',2],[12,1,'ランチ勉強会',3],[13,1.5,'G社ご提案',4],[14.5,1.5,'8月の受注準備',0],[16,1,'週次振り返り',3],[17,1.5,'来週の仕込み計画',1],[18.5,1,'資料送付',2]],
+  ];
+
+  let html = '';
+  for (let h = H0; h <= H1; h++) {
+    html += `<div class="hline" style="top:${yh(h)}px"></div>`;
+    if (h < H1 && h % 2 === 0) html += `<div class="hlab" style="top:${yh(h)}px">${h}時</div>`;
+  }
+  html += `<div class="todaybg" style="left:${LAB + tIdx * dayW}px;width:${dayW}px"></div>`;
+  for (let i = 0; i <= 5; i++) {
+    html += `<div class="vline" style="left:${LAB + i * dayW}px"></div>`;
+  }
+  for (let i = 0; i < 5; i++) {
+    for (const [st, len, name, col, half] of EVS[i]) {
+      const x0 = LAB + i * dayW;
+      const w = half === undefined ? dayW - 4 : dayW * .52;
+      const x = half === 1 ? x0 + dayW * .44 : x0 + 2;
+      html += `<div class="cal-ev" style="left:${x}px;top:${yh(st) + 1}px;width:${w}px;` +
+        `height:${Math.max(11, yh(st + len) - yh(st) - 2)}px;background:${EVCOLS[col]}">${name}</div>`;
+    }
+  }
+  html += `<div class="cal-now" id="cal-now" style="display:none"></div>`;
+  grid.innerHTML = html;
+
+  function nowLine() {
+    const d = new Date();
+    const h = d.getHours() + d.getMinutes() / 60;
+    const el = $('#cal-now');
+    if (h > H0 && h < H1) {
+      el.style.display = 'block'; el.style.top = yh(h) + 'px';
+    } else el.style.display = 'none';
+  }
+  nowLine(); setInterval(nowLine, 60000);
+})();
+
+/* ================= メール本文（手入力＋自動タイプ切り替え） ================= */
+const mbody = $('#mbody');
+const bodyWrap = $('#mbody-wrap');
+const OPS = [];
+function pushText(s) { // 1〜3文字ずつのかたまりで打つ
+  let i = 0;
+  while (i < s.length) {
+    if (s[i] === '\n') { OPS.push({ t:'\n' }); i++; continue; }
+    let n = 1 + Math.floor(Math.random() * 3);
+    n = Math.min(n, s.length - i);
+    if (s.slice(i, i + n).includes('\n')) n = s.indexOf('\n', i) - i;
+    OPS.push({ t: s.slice(i, i + n) });
+    i += n;
+  }
+}
+function pushBack(n) { OPS.push({ p: 480 }); for (let i = 0; i < n; i++) OPS.push({ b: 1 }); }
+pushText('桐生さん\n\nお疲れ様です。高橋です。\nケータリング事業の7月の進捗につてい');
+pushBack(2);
+pushText('いてご報告します。\n\n16日時点の累計売上は 4,375,000円で、対目標ペースでは -15%ほどの遅れが出ています。\n大口の宴会ケータリング2件の納品が8月へずれ込んだ影響が大きい状況です。\n\n');
+pushText('番会');
+pushBack(2);
+pushText('挽回に向けて、以下の対応を進めています。\n\n1. ミライ製造さま向け追加提案の前倒し（今週中に提出）\n2. 8月の宴会プランの受注強化（受付枠の告知とリマインドの配信）\n3. 試食会からの法人案件のフォロー強化\n\n');
+pushText('単発のネット注文は68件と好調で、お客様アンケートの満足度も4.6と高い水準を保てています。\n一方で、注文対応や請求まわりの事務作業が増えていて、対応が後手に回りつつあります。\nこのあたりの進め方も、本日の定例でご相談させてください。\n\n取り急ぎ、ご報告まで。\n\n高橋');
+
+let typed = '', opIdx = 0;
+let autoType = false; // 初期は手入力モード。撮影では役者が実際にタイプする
+const PREFILL = '桐生さん\n\nお疲れ様です。高橋です。\nケータリング事業の7月の進捗についてご報告します。\n\n16日時点の累計売上は 4,375,000円で、対目標ペースでは -15%ほどの遅れが出ています。\n大口の宴会ケータリング2件の納品が8月へずれ込んだ影響が大きい状況です。\n\n挽回に向けて、';
+mbody.textContent = PREFILL;
+mbody.addEventListener('input', () => { bodyWrap.scrollTop = bodyWrap.scrollHeight; });
+function setAutoType(on) {
+  autoType = on;
+  mbody.setAttribute('contenteditable', on ? 'false' : 'true');
+  if (on) { mbody.blur(); renderTyped(); }
+}
+function renderTyped() {
+  mbody.innerHTML = esc(typed) + '<span class="caret"></span>';
+  bodyWrap.scrollTop = bodyWrap.scrollHeight;
+}
+function typeStep() {
+  if (!autoType) { setTimeout(typeStep, 300); return; }
+  if (paused || performance.now() < typeHoldUntil) { setTimeout(typeStep, 160); return; }
+  const op = OPS[opIdx++];
+  if (!op) { // 打ち終わり → 少し置いて最初から
+    setTimeout(() => { typed = ''; opIdx = 0; renderTyped(); typeStep(); }, 10000);
+    return;
+  }
+  let d = 90;
+  if (op.t !== undefined) {
+    typed += op.t;
+    d = op.t === '\n' ? 320 : 88 * op.t.length + 60 + Math.random() * 110;
+    const last = op.t[op.t.length - 1];
+    if ('。！？'.includes(last)) d += 650 + Math.random() * 550;
+    else if (last === '、') d += 220;
+  } else if (op.b) { typed = typed.slice(0, -op.b); d = 130; }
+  else if (op.p) { d = op.p; }
+  renderTyped();
+  setTimeout(typeStep, d);
+}
+setTimeout(typeStep, 1200);
+
+/* ================= 通知・チャットの流し込み ================= */
+function fireChat() {
+  const now = fmtTime(new Date());
+  if (Math.random() < .62) { // 表示中チャンネル宛て
+    const m = nextTeam();
+    addChatMsg(m.from, m.text, now);
+    if (m.mention || Math.random() < .45) {
+      notify('chat', `${m.from}（# ケータリング）`, m.text);
+      bumpBadge('chat');
+    }
+  } else { // 別チャンネル・DM宛て
+    const m = nextOther();
+    bumpChannel(m.ch);
+    notify('chat', m.ch.startsWith('#') ? `${m.from}（${m.ch}）` : `${m.from}（DM）`, m.text);
+    bumpBadge('chat');
+  }
+}
+function fireForm() {
+  const f = nextForm();
+  notify('form', f.t, f.b);
+  bumpBadge('form');
+}
+function fireOther() {
+  const r = Math.random();
+  if (r < .30) fireForm();
+  else if (r < .55) { const m = nextMail(); notify('mail', m.from, m.sub); bumpBadge('mail'); }
+  else if (r < .70) { const c = nextCal(); notify('cal', c.t, c.b); bumpBadge('cal'); }
+  else if (r < .87) { const t = nextTask(); notify('task', t.t, t.b); bumpBadge('task'); }
+  else { const c = nextCall(); notify('video', c.t, c.b); bumpBadge('video'); }
+}
+function loopChat() {
+  setTimeout(() => { if (!paused) fireChat(); loopChat(); }, rand(3800, 8200) * intensity);
+}
+function loopOther() {
+  setTimeout(() => {
+    if (!paused) {
+      fireOther();
+      if (Math.random() < .3) setTimeout(() => !paused && fireOther(), rand(350, 900));
+    }
+    loopOther();
+  }, rand(3000, 7000) * intensity);
+}
+loopChat(); loopOther();
+
+/* 通知を出さずに未読だけが静かに積み上がっていく */
+const NOISY_CHANNELS = ['# 全社連絡','# 受注-配達','# メニュー開発','# 社内ツール-開発','# 営業',
+  '# 採用','# 顧客サポート','# 経理-総務','# 勉強会','# ニュース共有','# 雑談'];
+setInterval(() => {
+  if (paused) return;
+  bumpChannel(NOISY_CHANNELS[Math.floor(Math.random() * NOISY_CHANNELS.length)]);
+  if (Math.random() < .4) bumpChannel(NOISY_CHANNELS[Math.floor(Math.random() * NOISY_CHANNELS.length)]);
+  bumpBadge('chat');
+  if (Math.random() < .6) bumpBadge('mail', 1 + Math.floor(Math.random() * 3));
+}, 2400);
+
+/* 立ち上がりからにぎやかにする */
+setTimeout(fireForm, 900);
+setTimeout(fireChat, 1900);
+setTimeout(() => { const m = nextMail(); notify('mail', m.from, m.sub); bumpBadge('mail'); }, 3100);
+
+function burst() {
+  const n = 4 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < n; i++) {
+    setTimeout(() => (Math.random() < .5 ? fireChat() : fireOther()), i * rand(320, 620));
+  }
+}
+
+/* ================= キー操作 ================= */
+const hint = $('#hint');
+setTimeout(() => hint.classList.add('gone'), 9000);
+addEventListener('keydown', e => {
+  if (mbody.isContentEditable && (e.target === mbody || mbody.contains(e.target))) {
+    if (e.key === 'Escape') mbody.blur(); // 本文の入力中はショートカットを無効にする
+    return;
+  }
+  const k = e.key.toLowerCase();
+  if (k === 'f') {
+    document.fullscreenElement ? document.exitFullscreen()
+      : document.documentElement.requestFullscreen();
+  } else if (k === 'm') {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    soundOn = !soundOn;
+    if (soundOn) ping('chat');
+  } else if (k === '1') intensity = 1.8;
+  else if (k === '2') intensity = 1.0;
+  else if (k === '3') intensity = 0.42;
+  else if (k === 'b') burst();
+  else if (k === 't') setAutoType(!autoType);
+  else if (k === 'p') paused = !paused;
+  else if (k === 'h') hint.classList.toggle('gone');
+});
+
+/* 触っていないときはポインタを隠す */
+let cursorTimer = setTimeout(() => document.body.classList.add('hidecursor'), 2600);
+addEventListener('mousemove', () => {
+  document.body.classList.remove('hidecursor');
+  clearTimeout(cursorTimer);
+  cursorTimer = setTimeout(() => document.body.classList.add('hidecursor'), 2600);
+});
+</script>
+</body>
+</html>
